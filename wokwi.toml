@@ -1,0 +1,4 @@
+[wokwi]
+version = 1
+firmware = "SmartGreenhouse.ino.merged.bin"
+elf = "SmartGreenhouse.ino.elf"
