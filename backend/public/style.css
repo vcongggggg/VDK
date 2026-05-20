@@ -1,0 +1,107 @@
+/* ============================================================
+   Smart Greenhouse Dashboard - Main Stylesheet
+   Nhóm 10
+   ============================================================ */
+
+body {
+    font-family: 'Outfit', sans-serif;
+    background: linear-gradient(135deg, #e0f2f1 0%, #eceff1 100%);
+    min-height: 100vh;
+    padding: 20px;
+}
+
+.dashboard-container {
+    max-width: 1280px;
+    margin: 0 auto;
+}
+
+.glass-card {
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.05);
+    transition: all 0.3s ease;
+}
+
+.glass-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 12px 40px 0 rgba(31, 38, 135, 0.1);
+}
+
+.status-badge {
+    font-size: 0.9rem;
+    padding: 6px 16px;
+    border-radius: 50px;
+    font-weight: 600;
+}
+
+.status-online {
+    background-color: rgba(46, 204, 113, 0.15);
+    color: #27ae60;
+    border: 1px solid #2ecc71;
+}
+
+.status-offline {
+    background-color: rgba(231, 76, 60, 0.15);
+    color: #c0392b;
+    border: 1px solid #e74c3c;
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0%   { opacity: 0.8; }
+    50%  { opacity: 0.4; }
+    100% { opacity: 0.8; }
+}
+
+.value-display {
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: #2c3e50;
+}
+
+.unit {
+    font-size: 1.2rem;
+    color: #7f8c8d;
+    font-weight: 400;
+    margin-left: 5px;
+}
+
+.btn-control {
+    border-radius: 12px;
+    font-weight: 600;
+    padding: 12px 20px;
+    transition: all 0.2s ease;
+}
+
+.btn-control:hover {
+    filter: brightness(0.9);
+    transform: scale(1.02);
+}
+
+.log-box {
+    background: #1e272e;
+    color: #d2dae2;
+    border-radius: 12px;
+    padding: 15px;
+    height: 180px;
+    overflow-y: auto;
+    font-family: monospace;
+    font-size: 0.85rem;
+}
+
+.log-line {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    padding: 4px 0;
+}
+
+.log-danger {
+    color: #ff5e57;
+    font-weight: bold;
+}
+
+.log-success {
+    color: #0be881;
+}
