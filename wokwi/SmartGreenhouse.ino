@@ -5,9 +5,9 @@
 #include <ESP32Servo.h>
 
 // ── CẤU HÌNH WIFI & WEBSOCKET SERVER ───────────────────────────
-const char* ssid     = "Wokwi-GUEST"; // Thay đổi bằng WiFi nhà bạn khi nạp thực tế
-const char* password = "";
-const char* ws_host  = "192.168.1.7"; // Thay đổi bằng địa chỉ IP của máy tính chạy Node.js
+const char* ssid     = "KTKH P208 C"; // Thay đổi bằng WiFi nhà bạn khi nạp thực tế
+const char* password = "DUTITF2005";
+const char* ws_host  = "192.168.1.8"; // Thay đổi bằng địa chỉ IP của máy tính chạy Node.js
 const int   ws_port  = 3000;
 
 // ── KHAI BÁO CÁC CHÂN CẮM (PINS) ───────────────────────────────
@@ -53,16 +53,16 @@ float currentLightLevel = 0.0;
 
 // Hàm cập nhật trạng thái cơ cấu chấp hành (chỉ kích hoạt khi có thay đổi trạng thái)
 void updateActuators() {
-  // Điều khiển Máy bơm
+  // Điều khiển Máy bơm (Active HIGH - Đấu cổng NO)
   if (pumpState != lastPumpState) {
-    digitalWrite(PUMP_RELAY_PIN, pumpState ? HIGH : LOW);
+    digitalWrite(PUMP_RELAY_PIN, pumpState ? HIGH : LOW); // ON -> HIGH (hút relay), OFF -> LOW (nhả relay)
     lastPumpState = pumpState;
     Serial.printf("[HÀNH ĐỘNG] Máy bơm -> %s\n", pumpState ? "BẬT" : "TẮT");
   }
   
-  // Điều khiển Quạt
+  // Điều khiển Quạt (Active HIGH)
   if (fanState != lastFanState) {
-    digitalWrite(FAN_RELAY_PIN, fanState ? HIGH : LOW);
+    digitalWrite(FAN_RELAY_PIN, fanState ? HIGH : LOW); // ON -> HIGH, OFF -> LOW
     lastFanState = fanState;
     Serial.printf("[HÀNH ĐỘNG] Quạt tản nhiệt -> %s\n", fanState ? "BẬT" : "TẮT");
   }
@@ -128,10 +128,10 @@ void handleGreenhouseLogic() {
       }
 
       // 2.3. Quạt tản nhiệt (Phụ thuộc: Nhiệt độ)
-      // Bật quạt khi nhiệt độ > 35°C, tắt khi < 30°C
-      if (currentTemp > 35.0) {
+      // Bật quạt khi nhiệt độ > 40°C, tắt khi < 35°C
+      if (currentTemp > 40.0) {
         fanState = true;
-      } else if (currentTemp < 30.0) {
+      } else if (currentTemp < 35.0) {
         fanState = false;
       }
     }
@@ -214,11 +214,11 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
 void setup() {
   Serial.begin(115200);
 
-  // Thiết lập chân ngõ ra cho các Relay điều khiển
+  // Thiết lập chân ngõ ra cho các Relay điều khiển (Đấu cổng NO - Active HIGH)
   pinMode(PUMP_RELAY_PIN, OUTPUT);
   pinMode(FAN_RELAY_PIN, OUTPUT);
-  digitalWrite(PUMP_RELAY_PIN, LOW); // Mặc định tắt bơm ban đầu
-  digitalWrite(FAN_RELAY_PIN, LOW);  // Mặc định tắt quạt ban đầu
+  digitalWrite(PUMP_RELAY_PIN, LOW); // Mặc định tắt bơm ban đầu (Active HIGH)
+  digitalWrite(FAN_RELAY_PIN, LOW);  // Mặc định tắt quạt ban đầu (Active HIGH)
 
   // Khởi động các cảm biến & Động cơ
   dht.begin();
