@@ -67,9 +67,9 @@ void updateActuators() {
     Serial.printf("[HÀNH ĐỘNG] Quạt tản nhiệt -> %s\n", fanState ? "BẬT" : "TẮT");
   }
   
-  // Điều khiển Mái che (Servo)
+  // Điều khiển Mái che / Rèm (Servo)
   if (roofState != lastRoofState) {
-    roofServo.write(roofState ? 90 : 0);
+    roofServo.write(roofState ? 45 : 90); // Mở = 45 độ, Đóng = 90 độ
     lastRoofState = roofState;
     Serial.printf("[HÀNH ĐỘNG] Mái che -> %s\n", roofState ? "MỞ" : "ĐÓNG");
   }
@@ -111,24 +111,27 @@ void handleGreenhouseLogic() {
 
     // LOGIC TỰ ĐỘNG VỚI NGƯỠNG TRỄ (HYSTERESIS) để chống rung relay/servo
     if (isAutoMode) {
-      // 2.1. Mái che (Ngưỡng mở > 400, Ngưỡng đóng < 300)
+      // 2.1. Rèm/Mái che (Phụ thuộc: Ánh sáng)
+      // Mở khi ánh sáng > 400, đóng khi ánh sáng < 300
       if (currentLightLevel > 400.0) {
         roofState = true;
       } else if (currentLightLevel < 300.0) {
         roofState = false;
       }
 
-      // 2.2. Máy bơm (Ngưỡng bật < 30%, Ngưỡng tắt > 45%)
-      if (currentSoilMoisture < 30.0) {
+      // 2.2. Máy bơm (Phụ thuộc: Điện dung đất & Ánh sáng)
+      // Bơm khi đất khô (< 30%) VÀ trời không quá nắng gắt (ánh sáng < 800) để tránh bốc hơi nhanh/cháy lá
+      if (currentSoilMoisture < 30.0 && currentLightLevel < 800.0) {
         pumpState = true;
-      } else if (currentSoilMoisture > 45.0) {
+      } else if (currentSoilMoisture > 45.0 || currentLightLevel >= 800.0) {
         pumpState = false;
       }
 
-      // 2.3. Quạt tản nhiệt (Ngưỡng bật > 35°C, Ngưỡng tắt < 33°C)
+      // 2.3. Quạt tản nhiệt (Phụ thuộc: Nhiệt độ)
+      // Bật quạt khi nhiệt độ > 35°C, tắt khi < 30°C
       if (currentTemp > 35.0) {
         fanState = true;
-      } else if (currentTemp < 33.0) {
+      } else if (currentTemp < 30.0) {
         fanState = false;
       }
     }
@@ -142,7 +145,7 @@ void handleGreenhouseLogic() {
     doc["humidity"] = currentHum;
     doc["soil_moisture"] = currentSoilMoisture;
     doc["light_level"] = currentLightLevel;
-    doc["roof_status"] = roofState ? "MO (90 DEG)" : "DONG (0 DEG)";
+    doc["roof_status"] = roofState ? "MO" : "DONG";
     doc["pump_status"] = pumpState ? "BAT" : "TAT";
     doc["fan_status"] = fanState ? "BAT" : "TAT";
     doc["mode"] = isAutoMode ? "auto" : "manual";
@@ -220,7 +223,7 @@ void setup() {
   // Khởi động các cảm biến & Động cơ
   dht.begin();
   roofServo.attach(SERVO_PIN);
-  roofServo.write(0); // Khởi tạo góc mái che ở 0 độ (Đóng)
+  roofServo.write(90); // Khởi tạo góc mái che/rèm ở 90 độ (Đóng)
 
   // Kết nối WiFi
   WiFi.begin(ssid, password);
