@@ -172,6 +172,42 @@ socket.on('telemetry', (data) => {
     } else {
         alertSpamShield.light = false;
     }
+
+    if (data.anomalies && data.anomalies.length > 0) {
+    const timeStr = new Date().toLocaleTimeString('vi-VN'); // Lấy Timestamp
+
+    data.anomalies.forEach(anomaly => {
+        // Tạo chuỗi cảnh báo
+        const alertMsg = `[CẢNH BÁO] ${anomaly.sensor}: ${anomaly.detail}`;
+        
+        // 1. Ghi vào hộp Nhật ký hệ thống (Log box) có timestamp
+        addLog(alertMsg, 'danger');
+
+        // 2. Hiển thị Pop-up Toast góc màn hình (dùng SweetAlert2)
+        // Dùng Toast để không làm phiền người dùng như Pop-up giữa màn hình
+        const Toast = Swal.mixin({
+            toast: true,
+            position: 'top-end',
+            showConfirmButton: false,
+            timer: 4000,
+            timerProgressBar: true,
+        });
+
+        if (anomaly.type === 'SHOCK') {
+            Toast.fire({
+                icon: 'error',
+                title: anomaly.sensor + ' ĐỘT BIẾN!',
+                text: anomaly.detail + ` (Lúc ${timeStr})`
+            });
+        } else if (anomaly.type === 'DRIFT') {
+            Toast.fire({
+                icon: 'warning',
+                title: anomaly.sensor + ' TRÔI DẠT LỖI!',
+                text: anomaly.detail + ` (Lúc ${timeStr})`
+            });
+        }
+    });
+}
 });
 
 // Cập nhật màu các nút chế độ

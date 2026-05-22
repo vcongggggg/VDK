@@ -4,6 +4,12 @@ const { Server } = require('socket.io');
 const WebSocket = require('ws');
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
+const AnomalyDetector = require('./AnomalyDetector');
+
+const tempDetector = new AnomalyDetector(30, 3, 0.5, 10);
+const soilDetector = new AnomalyDetector(30, 3, 0.5, 10);
+let lastPumpStatus = "TAT";
+let lastFanStatus = "TAT";
 
 const app = express();
 const server = http.createServer(app);
@@ -126,6 +132,40 @@ wss.on('connection', (ws) => {
             lastEspSeen = Date.now();
             const data = JSON.parse(message);
             latestTelemetry = data;
+
+            // 1. NHẬN THỨC NGỮ CẢNH: Kiểm tra thiết bị có vừa bật/tắt không
+        if (data.pump_status !== lastPumpStatus) {
+            console.log("Phát hiện Bơm thay đổi -> Tạm ngưng báo động Độ ẩm đất 2 phút");
+            soilDetector.muteFor(120000); // Mute 2 phút
+            lastPumpStatus = data.pump_status;
+        }
+        if (data.fan_status !== lastFanStatus) {
+            console.log("Phát hiện Quạt thay đổi -> Tạm ngưng báo động Nhiệt độ 2 phút");
+            tempDetector.muteFor(120000); // Mute 2 phút
+            lastFanStatus = data.fan_status;
+        }
+
+            // 2. QUÉT BẤT THƯỜNG (Chỉ tạo cảnh báo, KHÔNG ra lệnh)
+            let anomalies = [];
+
+            // Quét Nhiệt độ
+            if (data.temperature !== undefined) {
+                const tempAnalysis = tempDetector.detect(data.temperature);
+                if (tempAnalysis.isAnomaly) {
+                    anomalies.push({ sensor: 'Nhiệt độ', type: tempAnalysis.type, detail: tempAnalysis.detail });
+                }
+            }
+
+            // Quét Độ ẩm đất
+            if (data.soil_moisture !== undefined) {
+                const soilAnalysis = soilDetector.detect(data.soil_moisture);
+                if (soilAnalysis.isAnomaly) {
+                    anomalies.push({ sensor: 'Độ ẩm đất', type: soilAnalysis.type, detail: soilAnalysis.detail });
+                }
+            }
+
+            // 3. ĐÓNG GÓI VÀO DỮ LIỆU ĐỂ GỬI LÊN GIAO DIỆN
+            data.anomalies = anomalies;
 
             // Broadcast dữ liệu cảm biến đến Dashboard qua Socket.IO
             io.emit('telemetry', data);
