@@ -9,29 +9,34 @@ class AnomalyDetector {
         this.cusumSlack = cusumSlack;
         this.cusumThreshold = cusumThreshold;
         
-        // BIẾN NGỮ CẢNH: Lưu thời điểm kết thúc thời gian tạm ngưng báo động
-        this.muteUntil = 0; 
+        // CƠ CHẾ MUTE ĐỘNG
+        this.isDeviceActive = false; // Trạng thái thực của Bơm/Quạt
+        this.settlingUntil = 0;      // Mốc thời gian chờ môi trường ổn định sau khi tắt
     }
 
-    // Hàm gọi khi thiết bị (Bơm/Quạt) thay đổi trạng thái
-    muteFor(milliseconds) {
-        this.muteUntil = Date.now() + milliseconds;
-        this.resetCusum(); // Xóa tích lũy cũ vì môi trường sắp thay đổi mạnh
+    // Hàm gọi khi thiết bị BẬT hoặc TẮT
+    setDeviceState(isActive, settlingMs = 15000) {
+        // Nếu thiết bị vừa chuyển từ BẬT sang TẮT
+        if (this.isDeviceActive && !isActive) {
+            // Cho môi trường thêm 1 khoảng thời gian ngắn để ổn định (vd: nước ngấm, nhiệt độ tản đều)
+            this.settlingUntil = Date.now() + settlingMs;
+        }
+        
+        this.isDeviceActive = isActive;
+        this.resetCusum(); // Xóa sạch tích lũy cũ
     }
 
-    // Kiểm tra xem thuật toán có đang bị "bịt mắt" không
+    // Thuật toán bị Mute nếu thiết bị ĐANG CHẠY hoặc ĐANG TRONG THỜI GIAN CHỜ ỔN ĐỊNH
     isMuted() {
-        return Date.now() < this.muteUntil;
+        return this.isDeviceActive || (Date.now() < this.settlingUntil);
     }
 
     detect(value) {
-        // 1. Giai đoạn làm nóng
         if (this.buffer.length < this.windowSize) {
             this.buffer.push(value);
             return { isAnomaly: false, type: 'WARM_UP', detail: 'Đang khởi tạo...' };
         }
 
-        // 2. Tính toán
         const sum = this.buffer.reduce((a, b) => a + b, 0);
         const mean = sum / this.windowSize;
         const variance = this.buffer.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / this.windowSize;
@@ -42,7 +47,7 @@ class AnomalyDetector {
 
         let isDrift = false;
 
-        // 3. CHỈ KIỂM TRA BẤT THƯỜNG NẾU KHÔNG BỊ MUTE (Thiết bị đang không can thiệp)
+        // CHỈ QUÉT BẤT THƯỜNG KHI KHÔNG BỊ MUTE
         if (!this.isMuted()) {
             this.cusumHigh = Math.max(0, this.cusumHigh + (value - mean) - this.cusumSlack);
             this.cusumLow = Math.max(0, this.cusumLow + (mean - value) - this.cusumSlack);
@@ -57,19 +62,18 @@ class AnomalyDetector {
                 return { isAnomaly: true, type: 'DRIFT', detail: `Trôi dạt dữ liệu bất thường!` };
             }
         } else {
-            // Nếu đang MUTE, reset CUSUM để không cộng dồn sai số do thiết bị gây ra
             this.resetCusum();
         }
 
-        // 4. Luôn trượt cửa sổ để cập nhật dữ liệu bình thường mới (dù có Mute hay không)
         this.buffer.shift();
         this.buffer.push(value);
 
-        return { 
-            isAnomaly: false, 
-            type: 'NORMAL', 
-            detail: this.isMuted() ? 'Đang bỏ qua báo động do thiết bị hoạt động' : null 
-        };
+        // Báo cho log biết đang ở trạng thái nào
+        let detailMsg = null;
+        if (this.isDeviceActive) detailMsg = 'Đang bỏ qua do thiết bị hoạt động';
+        else if (Date.now() < this.settlingUntil) detailMsg = 'Đang chờ môi trường ổn định sau khi tắt';
+
+        return { isAnomaly: false, type: 'NORMAL', detail: detailMsg };
     }
 
     resetCusum() {

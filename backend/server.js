@@ -6,10 +6,14 @@ const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const AnomalyDetector = require('./AnomalyDetector');
 
-const tempDetector = new AnomalyDetector(30, 3, 0.5, 10);
-const soilDetector = new AnomalyDetector(30, 3, 0.5, 10);
+const tempDetector  = new AnomalyDetector(30, 3, 0.5, 10);  // Nhiệt độ: sai số nhỏ (0.5 độ) đã tính
+const humDetector   = new AnomalyDetector(30, 3, 1.0, 15);  // Độ ẩm khí: dao động mạnh hơn
+const soilDetector  = new AnomalyDetector(30, 3, 1.0, 15);  // Độ ẩm đất
+const lightDetector = new AnomalyDetector(15, 3, 50, 500);  // Ánh sáng: Cửa sổ ngắn (15), Slack cực lớn (50 lux) vì mây bay qua cũng làm đổi lux
+
 let lastPumpStatus = "TAT";
 let lastFanStatus = "TAT";
+let lastRoofStatus = "DONG";
 
 const app = express();
 const server = http.createServer(app);
@@ -133,38 +137,51 @@ wss.on('connection', (ws) => {
             const data = JSON.parse(message);
             latestTelemetry = data;
 
-            // 1. NHẬN THỨC NGỮ CẢNH: Kiểm tra thiết bị có vừa bật/tắt không
-        if (data.pump_status !== lastPumpStatus) {
-            console.log("Phát hiện Bơm thay đổi -> Tạm ngưng báo động Độ ẩm đất 2 phút");
-            soilDetector.muteFor(120000); // Mute 2 phút
+            if (data.pump_status !== lastPumpStatus) {
+            const isPumpOn = (data.pump_status === "BAT");
+            soilDetector.setDeviceState(isPumpOn, 15000); // Tắt bơm xong đợi 15s cho nước ngấm
             lastPumpStatus = data.pump_status;
         }
-        if (data.fan_status !== lastFanStatus) {
-            console.log("Phát hiện Quạt thay đổi -> Tạm ngưng báo động Nhiệt độ 2 phút");
-            tempDetector.muteFor(120000); // Mute 2 phút
-            lastFanStatus = data.fan_status;
-        }
 
-            // 2. QUÉT BẤT THƯỜNG (Chỉ tạo cảnh báo, KHÔNG ra lệnh)
+            // Quạt thay đổi -> Ảnh hưởng Nhiệt độ & Độ ẩm khí
+            if (data.fan_status !== lastFanStatus) {
+                const isFanOn = (data.fan_status === "BAT");
+                tempDetector.setDeviceState(isFanOn, 10000); 
+                humDetector.setDeviceState(isFanOn, 10000);
+                lastFanStatus = data.fan_status;
+            }
+
+            // Mái che thay đổi -> Ảnh hưởng Ánh sáng (sốc tức thời) và Nhiệt ẩm
+            if (data.roof_status !== lastRoofStatus) {
+                // Khác với Bơm/Quạt là chạy liên tục, Mái che chỉ mất vài giây để quay Servo thay đổi góc.
+                // Do đó, ta chỉ dùng muteFor() để làm mù hệ thống trong thời gian mái đang quay và ánh sáng đang ổn định lại.
+                lightDetector.muteFor(10000); // Làm mù Z-Score ánh sáng trong 10s
+                tempDetector.muteFor(15000);  // Làm mù Nhiệt độ 15s
+                humDetector.muteFor(15000);   // Làm mù Độ ẩm khí 15s
+                
+                lastRoofStatus = data.roof_status;
+            }
+
+            // --- 3. QUÉT ĐỘT BIẾN TỔNG LỰC ---
             let anomalies = [];
 
-            // Quét Nhiệt độ
             if (data.temperature !== undefined) {
-                const tempAnalysis = tempDetector.detect(data.temperature);
-                if (tempAnalysis.isAnomaly) {
-                    anomalies.push({ sensor: 'Nhiệt độ', type: tempAnalysis.type, detail: tempAnalysis.detail });
-                }
+                const tempRes = tempDetector.detect(data.temperature);
+                if (tempRes.isAnomaly) anomalies.push({ sensor: 'Nhiệt độ', type: tempRes.type, detail: tempRes.detail });
             }
-
-            // Quét Độ ẩm đất
+            if (data.humidity !== undefined) {
+                const humRes = humDetector.detect(data.humidity);
+                if (humRes.isAnomaly) anomalies.push({ sensor: 'Độ ẩm khí', type: humRes.type, detail: humRes.detail });
+            }
             if (data.soil_moisture !== undefined) {
-                const soilAnalysis = soilDetector.detect(data.soil_moisture);
-                if (soilAnalysis.isAnomaly) {
-                    anomalies.push({ sensor: 'Độ ẩm đất', type: soilAnalysis.type, detail: soilAnalysis.detail });
-                }
+                const soilRes = soilDetector.detect(data.soil_moisture);
+                if (soilRes.isAnomaly) anomalies.push({ sensor: 'Độ ẩm đất', type: soilRes.type, detail: soilRes.detail });
+            }
+            if (data.light_level !== undefined) {
+                const lightRes = lightDetector.detect(data.light_level);
+                if (lightRes.isAnomaly) anomalies.push({ sensor: 'Ánh sáng', type: lightRes.type, detail: lightRes.detail });
             }
 
-            // 3. ĐÓNG GÓI VÀO DỮ LIỆU ĐỂ GỬI LÊN GIAO DIỆN
             data.anomalies = anomalies;
 
             // Broadcast dữ liệu cảm biến đến Dashboard qua Socket.IO
