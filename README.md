@@ -1,80 +1,77 @@
-# Hướng dẫn Khởi chạy Dự án: Nhà Kính Nông Nghiệp Thông Minh (Smart Greenhouse) - Nhóm 10
+# 🌿 Dự Án Nhà Kính Nông Nghiệp Thông Minh (Smart Greenhouse) - Nhóm 10
 
-Dự án này đã được nâng cấp hoàn toàn theo cấu trúc chuẩn từ **ChatGPT Shared Link** và cấu hình chạy cục bộ cực kỳ tiện lợi:
-*   **Realtime**: Dùng **Socket.IO** cho Dashboard kết nối thời gian thực & **Raw WebSockets** trên đường dẫn `/ws` cho ESP32.
-*   **Cơ sở dữ liệu**: Dùng **SQLite** để lưu lịch sử đo đạc ngoại tuyến (tự động tạo tệp `greenhouse.db` trong thư mục dự án mà không cần cài đặt SQL Server phức tạp).
-*   **Giao diện**: Dùng **Bootstrap 5** (giao diện kính mờ sang trọng) + **SweetAlert2** cho các hộp thoại cảnh báo thông minh.
-*   **Giám sát kết nối**: Tích hợp tính năng phát hiện trạng thái **ONLINE/OFFLINE** của ESP32 qua cơ chế Heartbeat (Timeout 10 giây).
+Dự án nghiên cứu và xây dựng hệ thống **Nhà Kính Thông Minh (Smart Greenhouse)** sử dụng vi điều khiển **ESP32-S3**, kết nối thời gian thực qua WebSockets/Socket.IO, lưu trữ SQLite và hỗ trợ mô phỏng trực quan trên Wokwi với giao diện Breadboard chuyên nghiệp.
 
 ---
 
-## 1. Cấu trúc thư mục dự án
-*   **`backend/`**: Thư mục chứa máy chủ Node.js.
-    *   `server.js`: Mã nguồn máy chủ chạy Express, Socket.IO và WebSockets.
-    *   `public/index.html`: Giao diện Dashboard hiển thị số liệu, biểu đồ thời gian thực.
-*   **`wokwi/`**: Thư mục chứa cấu hình giả lập Wokwi và ESP32.
-    *   `SmartGreenhouse.ino`: Code nạp cho ESP32.
-    *   `diagram.json` & `wokwi.toml`: Cấu hình chạy giả lập trên Wokwi (ESP32 DevKit V1).
+## 📂 1. Cấu Trúc Dự Án
+
+* 📁 **`backend/`**: Mã nguồn máy chủ Node.js & giao diện Web Dashboard.
+  * 📄 `server.js`: Web server chạy Express, Socket.IO (giao tiếp Dashboard) và WebSockets (giao tiếp ESP32).
+  * 📄 `AnomalyDetector.js`: Bộ phát hiện bất thường dựa trên thuật toán độ lệch chuẩn động (Dynamic Standard Deviation Baseline) và lọc nhiễu.
+  * 📁 `public/`: Chứa file `index.html` (giao diện kính mờ Bootstrap 5 & SweetAlert2) và các tài nguyên frontend.
+  * 📄 `greenhouse.db`: File cơ sở dữ liệu SQLite tự động tạo để lưu trữ lịch sử cảm biến.
+* 📁 **`wokwi/`**: Chứa môi trường mô phỏng trên Wokwi.
+  * 📄 `SmartGreenhouse.ino`: Chương trình điều khiển ESP32-S3 (firmware).
+  * 📄 `diagram.json`: Cấu hình sơ đồ đấu nối mạch ảo với Breadboard.
+  * 📄 `wokwi.toml`: Cấu hình chỉ định tệp biên dịch `.bin` và `.elf` dùng để nạp ảo cho mô phỏng.
 
 ---
 
-## 2. Các bước thiết lập và Khởi chạy Server
+## ⚡ 2. Sơ Đồ Đấu Nối Mạch (Chuẩn Breadboard Nguồn Đôi)
 
-### Bước 1: Khởi chạy Server Node.js
-1.  Mở CMD / PowerShell trong thư mục `backend/` của dự án.
-2.  Cài đặt các gói thư viện cần thiết:
-    ```bash
-    npm install
-    ```
-3.  Chạy máy chủ:
-    ```bash
-    node server.js
-    ```
-4.  Khi khởi chạy, chương trình sẽ tự động tạo file cơ sở dữ liệu `greenhouse.db` và bảng dữ liệu cảm biến trong thư mục `backend/`!
-5.  Mở trình duyệt truy cập: **`http://localhost:3000`**
+Để chống nhiễu sụt áp và bảo vệ linh kiện, hệ thống chạy cơ chế **Nguồn Đôi (Dual Power)** với cực âm nối chung (**Common GND**):
+
+1. **Nguồn 3.3V (từ ESP32-S3):** Cấp cho dải nguồn dưới Breadboard (`bp` & `bn`), nuôi các cảm biến:
+   * **Cảm biến nhiệt độ/độ ẩm khí (DHT11/DHT22):** Chân DATA ➡️ **GPIO 13**
+   * **Cảm biến quang trở (LDR):** Chân Analog Out (AO) ➡️ **GPIO 1**
+   * **Cảm biến độ ẩm đất (Biến trở):** Chân Analog Out (AO) ➡️ **GPIO 2**
+2. **Nguồn ngoài 5V (Củ sạc/Cáp nguồn):** Cấp cho dải nguồn trên Breadboard (`tp` & `tn`), nuôi các thiết bị chấp hành:
+   * **Động cơ Servo SG90 (Mái che):** Chân tín hiệu PWM ➡️ **GPIO 14**
+   * **Module Relay Kênh 1 (Bơm):** Chân kích tín hiệu IN1 ➡️ **GPIO 18** (Đấu cổng NO - Thường mở, Active-HIGH)
+   * **Module Relay Kênh 2 (Quạt):** Chân kích tín hiệu IN2 ➡️ **GPIO 17** (Đấu cổng NO - Thường mở, Active-HIGH)
 
 ---
 
-## 3. Các bước chạy trên mô phỏng Wokwi hoặc Nạp thực tế
+## 🚀 3. Hướng Dẫn Thiết Lập & Khởi Chạy Server (Backend)
 
-### A. Đối với mô phỏng Wokwi (Trực tiếp trong VS Code)
-1.  Đảm bảo đã cài đặt extension **Wokwi Simulator** trong VS Code.
-2.  Mở thư mục `wokwi/` hoặc mở file `wokwi/diagram.json` hoặc `wokwi/SmartGreenhouse.ino`.
-3.  Nhấn `F1` (hoặc `Ctrl+Shift+P`), chọn **Wokwi: Start Simulator**.
-4.  ESP32 sẽ khởi chạy ảo, kết nối mạng `Wokwi-GUEST` và kết nối trực tiếp đến Node.js Server cục bộ của bạn trên máy tính qua WebSocket.
+### Yêu cầu cài đặt trước:
 
-### B. Đối với mạch thực tế
-1.  Mở `wokwi/SmartGreenhouse.ino` trên **Arduino IDE**.
-2.  Cài đặt các thư viện sau thông qua Library Manager (Ctrl+Shift+I):
-    *   `DHT sensor library`
-    *   `ESP32Servo`
-    *   `ArduinoJson`
-    *   `WebSockets` (bởi Markus Sattler)
-3.  Chỉnh sửa các cấu hình ở đầu file `SmartGreenhouse.ino`:
-    *   `ssid` / `password`: WiFi của nhà bạn.
-    *   `ws_host`: Địa chỉ IP cục bộ của máy tính chạy server (ví dụ: `192.168.1.15`).
-4.  Chọn cổng COM, board `ESP32 Dev Module` và tiến hành nạp code.
+* Đã cài đặt [Node.js](https://nodejs.org/) (Khuyến nghị phiên bản LTS từ 18 trở lên).
+
+### Các bước khởi chạy:
+
+1. Mở terminal (CMD / PowerShell) tại thư mục `backend/` của dự án.
+2. Cài đặt các thư viện cần thiết:
+   ```bash
+   npm install
+   ```
+3. Khởi chạy máy chủ:
+   ```bash
+   node server.js
+   ```
+4. Khi khởi chạy thành công, terminal sẽ hiển thị:
+   * `Server is running on port 3000`
+   * `Database SQLite initialized successfully.`
+5. Mở trình duyệt Web và truy cập: **`http://localhost:3000`** để vào trang Dashboard điều khiển.
 
 ---
 
-## 4. Các kịch bản kiểm tra tính năng đồ án (Dành cho thi vấn đáp)
+## 🛠️ 4. Hướng Dẫn Nạp Code Mạch Thật (Arduino IDE)
 
-1.  **Kiểm tra tính năng Online Realtime:**
-    *   Mở trình duyệt `http://localhost:3000`. Khi ESP32 chạy, badge trạng thái góc phải sẽ chuyển sang màu xanh lá: **`ESP32: ONLINE`**.
-    *   Kéo thanh trượt Potentiometer (giả lập độ ẩm đất) hoặc thay đổi nhiệt độ trên DHT11, biểu đồ và các ô số liệu trên Web sẽ cập nhật tức thời (< 0.1 giây).
+1. Mở tệp [wokwi/SmartGreenhouse.ino](file:///c:/Study/VDK/SmartGreenhouse/wokwi/SmartGreenhouse.ino) bằng **Arduino IDE**.
+2. Cài đặt các thư viện hỗ trợ qua **Library Manager** (`Ctrl + Shift + I`):
+   * `DHT sensor library` (by Adafruit)
+   * `ESP32Servo` (by Kevin Sweet)
+   * `ArduinoJson` (by Benoit Blanchon)
+   * `WebSockets` (by Markus Sattler)
+3. Cập nhật thông tin kết nối WiFi và IP máy chủ ở đầu file:
+   ```cpp
+   const char* ssid     = "TÊN_WIFI_NHÀ_BẠN";
+   const char* password = "MẬT_KHẨU_WIFI";
+   const char* ws_host  = "ĐỊA_CHỈ_IP_CỤC_BỘ_CỦA_MÁY_TÍNH"; // Ví dụ: 192.168.1.15
+   const int   ws_port  = 3000;
+   ```
+4. Chọn board **ESP32-S3 Dev Module** và cổng COM tương ứng, nhấn nút **Upload** để nạp chương trình.
 
-2.  **Kiểm tra tính năng Heartbeat Offline:**
-    *   Tắt giả lập Wokwi (hoặc rút cáp ESP32). Sau đúng 10 giây, máy chủ phát hiện mất tín hiệu, Badge trên Web tự động nhấp nháy đỏ: **`ESP32: OFFLINE`**, các số đo chuyển thành `--`.
-
-3.  **Kiểm tra tính năng Cảnh báo bất thường (SweetAlert2):**
-    *   Kéo nhiệt độ DHT11 vượt **40°C** ➡️ Web lập tức hiện thông báo đỏ **SweetAlert2** báo động nguy hiểm, banner đỏ nhấp nháy.
-    *   Kéo độ ẩm đất xuống dưới **30%** ➡️ Hiện thông báo cảnh báo đất bị khô hạn.
-    *   Kéo ánh sáng LDR vượt **800 lux** ➡️ Hiện thông báo ánh nắng cực mạnh.
-
-4.  **Kiểm tra Điều khiển từ xa (MANUAL Mode):**
-    *   Nhấn nút chuyển sang chế độ **MANUAL Mode** trên Web.
-    *   Thử nhấn nút **Đóng/Mở Mái Che**, **Bật/Tắt Máy Bơm**, **Bật/Tắt Quạt** ➡️ Đèn LED và động cơ Servo trên Wokwi/mạch thật sẽ phản hồi quay và sáng lập tức.
-
-5.  **Kiểm tra tính năng Database SQLite (Offline Mode):**
-    *   Dữ liệu cảm biến tự lưu vào file database cục bộ `greenhouse.db` mỗi 2 giây.
-    *   Nhấn nút **"Tải lịch sử SQLite"** ➡️ Hệ thống gọi API xuống DB kéo dữ liệu cũ vẽ lại lên đồ thị.
+---
