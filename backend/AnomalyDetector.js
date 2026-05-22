@@ -47,7 +47,6 @@ class AnomalyDetector {
 
         let isDrift = false;
 
-        // CHỈ QUÉT BẤT THƯỜNG KHI KHÔNG BỊ MUTE
         if (!this.isMuted()) {
             this.cusumHigh = Math.max(0, this.cusumHigh + (value - mean) - this.cusumSlack);
             this.cusumLow = Math.max(0, this.cusumLow + (mean - value) - this.cusumSlack);
@@ -55,11 +54,21 @@ class AnomalyDetector {
 
             if (isShock) {
                 this.resetCusum();
-                return { isAnomaly: true, type: 'SHOCK', detail: `Sốc đột biến! (Z-Score: ${zScore.toFixed(1)})` };
+                return { 
+                    isAnomaly: true, 
+                    type: 'SHOCK', 
+                    value: value,
+                    detail: `Đo được ${value.toFixed(1)}, bình thường chỉ khoảng ${mean.toFixed(1)}. Đang thay đổi quá nhanh!` 
+                };
             }
             if (isDrift) {
                 this.resetCusum();
-                return { isAnomaly: true, type: 'DRIFT', detail: `Trôi dạt dữ liệu bất thường!` };
+                return { 
+                    isAnomaly: true, 
+                    type: 'DRIFT', 
+                    value: value, 
+                    detail: `Đo được ${value.toFixed(1)} và đang lệch dần so với mức ổn định (${mean.toFixed(1)}). Cần kiểm tra lại thiết bị!` 
+                };
             }
         } else {
             this.resetCusum();
@@ -68,10 +77,9 @@ class AnomalyDetector {
         this.buffer.shift();
         this.buffer.push(value);
 
-        // Báo cho log biết đang ở trạng thái nào
         let detailMsg = null;
-        if (this.isDeviceActive) detailMsg = 'Đang bỏ qua do thiết bị hoạt động';
-        else if (Date.now() < this.settlingUntil) detailMsg = 'Đang chờ môi trường ổn định sau khi tắt';
+        if (this.isDeviceActive) detailMsg = 'Bỏ qua báo động (Thiết bị đang chạy)';
+        else if (Date.now() < this.settlingUntil) detailMsg = 'Bỏ qua báo động (Chờ môi trường ổn định)';
 
         return { isAnomaly: false, type: 'NORMAL', detail: detailMsg };
     }

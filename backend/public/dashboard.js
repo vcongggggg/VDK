@@ -1,8 +1,3 @@
-// ============================================================
-// Smart Greenhouse Dashboard - Main JavaScript
-// Nhóm 10
-// ============================================================
-
 // Kết nối tới Socket.IO Server
 const socket = io();
 let currentMode = 'auto';
@@ -29,6 +24,22 @@ const sensorChart = new Chart(ctx, {
                 data: [],
                 yAxisID: 'y1',
                 tension: 0.3
+            },
+            {
+                label: 'Độ ẩm khí (%)',
+                borderColor: '#2ecc71',
+                backgroundColor: 'rgba(46, 204, 113, 0.1)',
+                data: [],
+                yAxisID: 'y1',
+                tension: 0.3
+            },
+            {
+                label: 'Ánh sáng (lux)',
+                borderColor: '#f1c40f',
+                backgroundColor: 'rgba(241, 196, 15, 0.1)',
+                data: [],
+                yAxisID: 'y2',
+                tension: 0.3
             }
         ]
     },
@@ -38,21 +49,26 @@ const sensorChart = new Chart(ctx, {
         scales: {
             x: { grid: { display: false } },
             y: { type: 'linear', display: true, position: 'left', title: { display: true, text: 'Nhiệt độ (°C)' } },
-            y1: { type: 'linear', display: true, position: 'right', grid: { drawOnChartArea: false }, title: { display: true, text: 'Độ ẩm đất (%)' } }
+            y1: { type: 'linear', display: true, position: 'right', grid: { drawOnChartArea: false }, title: { display: true, text: 'Độ ẩm (%)' } },
+            y2: { type: 'linear', display: true, position: 'right', grid: { drawOnChartArea: false }, title: { display: true, text: 'Ánh sáng (lux)' } }
         }
     }
 });
 
 // Hàm cập nhật đồ thị
-function updateChart(timestamp, temp, soil) {
+function updateChart(timestamp, temp, soil, hum, light) {
     if (sensorChart.data.labels.length > 20) {
         sensorChart.data.labels.shift();
         sensorChart.data.datasets[0].data.shift();
         sensorChart.data.datasets[1].data.shift();
+        sensorChart.data.datasets[2].data.shift();
+        sensorChart.data.datasets[3].data.shift();
     }
     sensorChart.data.labels.push(timestamp);
     sensorChart.data.datasets[0].data.push(temp);
     sensorChart.data.datasets[1].data.push(soil);
+    sensorChart.data.datasets[2].data.push(hum);
+    sensorChart.data.datasets[3].data.push(light);
     sensorChart.update();
 }
 
@@ -118,7 +134,7 @@ socket.on('telemetry', (data) => {
 
     // Vẽ đồ thị
     const timeLabel = new Date().toLocaleTimeString('vi-VN');
-    updateChart(timeLabel, data.temperature, data.soil_moisture);
+    updateChart(timeLabel, data.temperature, data.soil_moisture, data.humidity, data.light_level);
 
     // --- Kiểm tra logic cảnh báo nguy cơ bất thường (Theo link ChatGPT) ---
     
@@ -174,40 +190,51 @@ socket.on('telemetry', (data) => {
     }
 
     if (data.anomalies && data.anomalies.length > 0) {
-    const timeStr = new Date().toLocaleTimeString('vi-VN'); // Lấy Timestamp
+        data.anomalies.forEach(anomaly => {
+            const timeStr = new Date().toLocaleTimeString('vi-VN');
 
-    data.anomalies.forEach(anomaly => {
-        // Tạo chuỗi cảnh báo
-        const alertMsg = `[CẢNH BÁO] ${anomaly.sensor}: ${anomaly.detail}`;
-        
-        // 1. Ghi vào hộp Nhật ký hệ thống (Log box) có timestamp
-        addLog(alertMsg, 'danger');
+            // 1. Ghi vào Hộp Nhật Ký (Ngắn gọn, dễ hiểu)
+            const logMsg = `[Cảnh báo] ${anomaly.sensor}: ${anomaly.detail}`;
+            addLog(logMsg, 'danger');
 
-        // 2. Hiển thị Pop-up Toast góc màn hình (dùng SweetAlert2)
-        // Dùng Toast để không làm phiền người dùng như Pop-up giữa màn hình
-        const Toast = Swal.mixin({
-            toast: true,
-            position: 'top-end',
-            showConfirmButton: false,
-            timer: 4000,
-            timerProgressBar: true,
+            // 2. Hiển thị thông báo nổi (Toast) góc màn hình
+            const Toast = Swal.mixin({
+                toast: true,
+                position: 'top-end',
+                showConfirmButton: false,
+                timer: 8000, // Đợi 8 giây để các bác nông dân kịp đọc
+                timerProgressBar: true,
+            });
+
+            // Việt hóa loại cảnh báo
+            let titleType = "";
+            let iconType = "warning";
+
+            if (anomaly.type === 'SHOCK') {
+                titleType = "THAY ĐỔI ĐỘT NGỘT!";
+                iconType = "error"; // Dùng icon đỏ báo nguy hiểm
+            } else if (anomaly.type === 'DRIFT') {
+                titleType = "CÓ DẤU HIỆU LỖI!";
+                iconType = "warning"; // Dùng icon vàng báo cần kiểm tra
+            }
+
+            // Gắn thêm đơn vị đo (để hiển thị thành 38.5°C hoặc 25%)
+            let unit = "";
+            if (anomaly.sensor === 'Nhiệt độ') unit = "°C";
+            if (anomaly.sensor === 'Độ ẩm đất' || anomaly.sensor === 'Độ ẩm khí') unit = "%";
+            if (anomaly.sensor === 'Ánh sáng') unit = " lux";
+
+            // Thay thế thông số trong chuỗi detail để có đơn vị đo
+            // Ví dụ: chuyển "Đo được 38.5..." thành "Đo được 38.5°C..."
+            let textUi = anomaly.detail.replace(/([0-9]+\.[0-9]+)/g, `$1${unit}`);
+
+            Toast.fire({
+                icon: iconType,
+                title: `${anomaly.sensor} ${titleType}`,
+                text: textUi
+            });
         });
-
-        if (anomaly.type === 'SHOCK') {
-            Toast.fire({
-                icon: 'error',
-                title: anomaly.sensor + ' ĐỘT BIẾN!',
-                text: anomaly.detail + ` (Lúc ${timeStr})`
-            });
-        } else if (anomaly.type === 'DRIFT') {
-            Toast.fire({
-                icon: 'warning',
-                title: anomaly.sensor + ' TRÔI DẠT LỖI!',
-                text: anomaly.detail + ` (Lúc ${timeStr})`
-            });
-        }
-    });
-}
+    }
 });
 
 // Cập nhật màu các nút chế độ
