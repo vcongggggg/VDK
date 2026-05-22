@@ -6,10 +6,10 @@ const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const AnomalyDetector = require('./AnomalyDetector');
 
-const tempDetector  = new AnomalyDetector(30, 3, 0.5, 10);  // Nhiệt độ: sai số nhỏ (0.5 độ) đã tính
-const humDetector   = new AnomalyDetector(30, 3, 1.0, 15);  // Độ ẩm khí: dao động mạnh hơn
-const soilDetector  = new AnomalyDetector(30, 3, 1.0, 15);  // Độ ẩm đất
-const lightDetector = new AnomalyDetector(15, 3, 50, 500);  // Ánh sáng: Cửa sổ ngắn (15), Slack cực lớn (50 lux) vì mây bay qua cũng làm đổi lux
+const tempDetector  = new AnomalyDetector(30, 3, 0.5, 10, 0.5, 30000);  // Nhiệt độ: minStdDev = 0.5°C, Cooldown = 30s
+const humDetector   = new AnomalyDetector(30, 3, 1.0, 15, 1.5, 30000);  // Độ ẩm khí: minStdDev = 1.5%, Cooldown = 30s
+const soilDetector  = new AnomalyDetector(30, 3, 1.0, 15, 2.0, 30000);  // Độ ẩm đất: minStdDev = 2.0%, Cooldown = 30s
+const lightDetector = new AnomalyDetector(15, 3, 50, 500, 30.0, 30000); // Ánh sáng: minStdDev = 30.0 lux, Cooldown = 30s
 
 let lastPumpStatus = "TAT";
 let lastFanStatus = "TAT";

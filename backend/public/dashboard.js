@@ -1,6 +1,8 @@
 // Kết nối tới Socket.IO Server
 const socket = io();
 let currentMode = 'auto';
+let pendingMode = null;
+let pendingModeTimer = null;
 
 // Cấu hình Chart.js
 const ctx = document.getElementById('sensorChart').getContext('2d');
@@ -124,13 +126,29 @@ socket.on('telemetry', (data) => {
     document.getElementById('sensor-soil').innerText = data.soil_moisture.toFixed(1);
     document.getElementById('sensor-light').innerText = data.light_level.toFixed(0);
 
-    document.getElementById('status-mode').innerText = data.mode.toUpperCase();
     document.getElementById('status-roof').innerText = data.roof_status;
     document.getElementById('status-pump').innerText = data.pump_status;
     document.getElementById('status-fan').innerText = data.fan_status;
 
-    currentMode = data.mode;
-    updateModeButtons();
+    // Kiểm tra và giải phóng khóa pendingMode nếu nhận được trạng thái khớp từ thiết bị
+    if (pendingMode !== null) {
+        if (data.mode === pendingMode) {
+            pendingMode = null;
+            if (pendingModeTimer) {
+                clearTimeout(pendingModeTimer);
+                pendingModeTimer = null;
+            }
+        }
+    }
+
+    // Chỉ cập nhật trạng thái chế độ từ telemetry khi không có lệnh thay đổi chế độ đang chờ xử lý từ phía Client
+    if (pendingMode === null) {
+        currentMode = data.mode;
+        updateModeButtons();
+        document.getElementById('status-mode').innerText = data.mode.toUpperCase();
+    } else {
+        document.getElementById('status-mode').innerText = pendingMode.toUpperCase();
+    }
 
     // Vẽ đồ thị
     const timeLabel = new Date().toLocaleTimeString('vi-VN');
@@ -144,12 +162,26 @@ socket.on('telemetry', (data) => {
         banner.classList.remove('d-none');
         if (!alertSpamShield.temp) {
             alertSpamShield.temp = true;
-            Swal.fire({
-                icon: 'error',
-                title: 'Nhiệt độ quá cao!',
-                text: `Nhiệt độ đo được là ${data.temperature.toFixed(1)}°C vượt ngưỡng 40°C. Hệ thống đã kích hoạt quạt thông gió!`,
-                confirmButtonColor: '#e74c3c'
-            });
+            if (currentMode === 'auto') {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Nhiệt độ quá cao!',
+                    text: `Nhiệt độ đo được là ${data.temperature.toFixed(1)}°C vượt ngưỡng 40°C. Hệ thống đã kích hoạt quạt thông gió!`,
+                    confirmButtonColor: '#e74c3c'
+                });
+            } else {
+                Swal.mixin({
+                    toast: true,
+                    position: 'top-end',
+                    showConfirmButton: false,
+                    timer: 5000,
+                    timerProgressBar: true,
+                }).fire({
+                    icon: 'error',
+                    title: 'Nhiệt độ quá cao!',
+                    text: `Nhiệt độ đo được là ${data.temperature.toFixed(1)}°C. Vui lòng bật quạt thủ công!`
+                });
+            }
             addLog(`Cảnh báo: Nhiệt độ nguy hại (${data.temperature.toFixed(1)}°C)!`, 'danger');
         }
     } else {
@@ -161,12 +193,26 @@ socket.on('telemetry', (data) => {
     if (data.soil_moisture < 30) {
         if (!alertSpamShield.soil) {
             alertSpamShield.soil = true;
-            Swal.fire({
-                icon: 'warning',
-                title: 'Đất bị khô hạn!',
-                text: `Độ ẩm đất đo được chỉ còn ${data.soil_moisture.toFixed(1)}% (< 30%). Hãy kiểm tra máy bơm!`,
-                confirmButtonColor: '#f1c40f'
-            });
+            if (currentMode === 'auto') {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Đất bị khô hạn!',
+                    text: `Độ ẩm đất đo được chỉ còn ${data.soil_moisture.toFixed(1)}% (< 30%). Hãy kiểm tra máy bơm!`,
+                    confirmButtonColor: '#f1c40f'
+                });
+            } else {
+                Swal.mixin({
+                    toast: true,
+                    position: 'top-end',
+                    showConfirmButton: false,
+                    timer: 5000,
+                    timerProgressBar: true,
+                }).fire({
+                    icon: 'warning',
+                    title: 'Đất bị khô hạn!',
+                    text: `Độ ẩm đất đo được chỉ còn ${data.soil_moisture.toFixed(1)}%. Vui lòng bật máy bơm thủ công!`
+                });
+            }
             addLog(`Cảnh báo: Độ ẩm đất quá thấp (${data.soil_moisture.toFixed(1)}%)!`, 'danger');
         }
     } else {
@@ -177,12 +223,26 @@ socket.on('telemetry', (data) => {
     if (data.light_level > 800) {
         if (!alertSpamShield.light) {
             alertSpamShield.light = true;
-            Swal.fire({
-                icon: 'info',
-                title: 'Ánh sáng cực mạnh!',
-                text: `Cường độ sáng đo được đạt ${data.light_level.toFixed(0)} lux. Mái che mở tự động để tản nhiệt!`,
-                confirmButtonColor: '#3498db'
-            });
+            if (currentMode === 'auto') {
+                Swal.fire({
+                    icon: 'info',
+                    title: 'Ánh sáng cực mạnh!',
+                    text: `Cường độ sáng đo được đạt ${data.light_level.toFixed(0)} lux. Mái che mở tự động để tản nhiệt!`,
+                    confirmButtonColor: '#3498db'
+                });
+            } else {
+                Swal.mixin({
+                    toast: true,
+                    position: 'top-end',
+                    showConfirmButton: false,
+                    timer: 5000,
+                    timerProgressBar: true,
+                }).fire({
+                    icon: 'info',
+                    title: 'Ánh sáng cực mạnh!',
+                    text: `Cường độ sáng đo được đạt ${data.light_level.toFixed(0)} lux. Vui lòng mở mái che thủ công!`
+                });
+            }
             addLog(`Cảnh báo: Ánh nắng trực xạ cao (${data.light_level.toFixed(0)} lux).`, 'info');
         }
     } else {
@@ -253,9 +313,20 @@ function updateModeButtons() {
 // Thay đổi chế độ AUTO / MANUAL
 function setMode(mode) {
     currentMode = mode;
+    pendingMode = mode;
+    if (pendingModeTimer) clearTimeout(pendingModeTimer);
+    pendingModeTimer = setTimeout(() => {
+        pendingMode = null;
+    }, 4000); // Tạm khóa 4 giây để chờ ESP32 cập nhật và phản hồi telemetry mới
+
     socket.emit('control', { cmd: 'set_mode', mode: mode });
     addLog(`Gửi yêu cầu đổi chế độ -> ${mode.toUpperCase()}`);
     updateModeButtons();
+
+    // Đóng các hộp thoại cảnh báo modal tự động khi chuyển sang chế độ MANUAL
+    if (mode === 'manual') {
+        Swal.close();
+    }
 }
 
 // Gửi lệnh điều khiển tay
