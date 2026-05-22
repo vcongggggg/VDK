@@ -108,7 +108,6 @@ socket.on('esp_status', (data) => {
         badge.innerHTML = '<i class="bi bi-broadcast me-1"></i> ESP32: OFFLINE';
         addLog("Mất kết nối với mạch ESP32 (OFFLINE)!", "danger");
         
-        // Xóa trắng số hiển thị nếu offline
         document.getElementById('sensor-temp').innerText = '--';
         document.getElementById('sensor-hum').innerText = '--';
         document.getElementById('sensor-soil').innerText = '--';
@@ -120,7 +119,6 @@ socket.on('esp_status', (data) => {
 socket.on('telemetry', (data) => {
     if (data.temperature === undefined) return;
 
-    // Cập nhật giao diện số liệu
     document.getElementById('sensor-temp').innerText = data.temperature.toFixed(1);
     document.getElementById('sensor-hum').innerText = data.humidity.toFixed(1);
     document.getElementById('sensor-soil').innerText = data.soil_moisture.toFixed(1);
@@ -130,7 +128,6 @@ socket.on('telemetry', (data) => {
     document.getElementById('status-pump').innerText = data.pump_status;
     document.getElementById('status-fan').innerText = data.fan_status;
 
-    // Kiểm tra và giải phóng khóa pendingMode nếu nhận được trạng thái khớp từ thiết bị
     if (pendingMode !== null) {
         if (data.mode === pendingMode) {
             pendingMode = null;
@@ -141,7 +138,6 @@ socket.on('telemetry', (data) => {
         }
     }
 
-    // Chỉ cập nhật trạng thái chế độ từ telemetry khi không có lệnh thay đổi chế độ đang chờ xử lý từ phía Client
     if (pendingMode === null) {
         currentMode = data.mode;
         updateModeButtons();
@@ -150,13 +146,11 @@ socket.on('telemetry', (data) => {
         document.getElementById('status-mode').innerText = pendingMode.toUpperCase();
     }
 
-    // Vẽ đồ thị
     const timeLabel = new Date().toLocaleTimeString('vi-VN');
     updateChart(timeLabel, data.temperature, data.soil_moisture, data.humidity, data.light_level);
 
-    // --- Kiểm tra logic cảnh báo nguy cơ bất thường (Theo link ChatGPT) ---
-    
-    // 2.1 Cảnh báo Nhiệt độ quá cao (> 40 độ C)
+
+    // 2.1 Cảnh báo Nhiệt độ quá cao
     const banner = document.getElementById('system-alert-banner');
     if (data.temperature > 40) {
         banner.classList.remove('d-none');
@@ -189,7 +183,7 @@ socket.on('telemetry', (data) => {
         alertSpamShield.temp = false;
     }
 
-    // 2.2 Cảnh báo Đất khô hạn (< 30%)
+    // 2.2 Cảnh báo Đất khô hạn
     if (data.soil_moisture < 30) {
         if (!alertSpamShield.soil) {
             alertSpamShield.soil = true;
@@ -219,7 +213,7 @@ socket.on('telemetry', (data) => {
         alertSpamShield.soil = false;
     }
 
-    // 2.3 Cảnh báo Ánh sáng quá gắt (> 800 lux)
+    // 2.3 Cảnh báo Ánh sáng quá gắt
     if (data.light_level > 800) {
         if (!alertSpamShield.light) {
             alertSpamShield.light = true;
@@ -253,39 +247,33 @@ socket.on('telemetry', (data) => {
         data.anomalies.forEach(anomaly => {
             const timeStr = new Date().toLocaleTimeString('vi-VN');
 
-            // 1. Ghi vào Hộp Nhật Ký (Ngắn gọn, dễ hiểu)
             const logMsg = `[Cảnh báo] ${anomaly.sensor}: ${anomaly.detail}`;
             addLog(logMsg, 'danger');
 
-            // 2. Hiển thị thông báo nổi (Toast) góc màn hình
             const Toast = Swal.mixin({
                 toast: true,
                 position: 'top-end',
                 showConfirmButton: false,
-                timer: 8000, // Đợi 8 giây để các bác nông dân kịp đọc
+                timer: 8000,
                 timerProgressBar: true,
             });
 
-            // Việt hóa loại cảnh báo
             let titleType = "";
             let iconType = "warning";
 
             if (anomaly.type === 'SHOCK') {
                 titleType = "THAY ĐỔI ĐỘT NGỘT!";
-                iconType = "error"; // Dùng icon đỏ báo nguy hiểm
+                iconType = "error";
             } else if (anomaly.type === 'DRIFT') {
                 titleType = "CÓ DẤU HIỆU LỖI!";
-                iconType = "warning"; // Dùng icon vàng báo cần kiểm tra
+                iconType = "warning";
             }
 
-            // Gắn thêm đơn vị đo (để hiển thị thành 38.5°C hoặc 25%)
             let unit = "";
             if (anomaly.sensor === 'Nhiệt độ') unit = "°C";
             if (anomaly.sensor === 'Độ ẩm đất' || anomaly.sensor === 'Độ ẩm khí') unit = "%";
             if (anomaly.sensor === 'Ánh sáng') unit = " lux";
 
-            // Thay thế thông số trong chuỗi detail để có đơn vị đo
-            // Ví dụ: chuyển "Đo được 38.5..." thành "Đo được 38.5°C..."
             let textUi = anomaly.detail.replace(/([0-9]+\.[0-9]+)/g, `$1${unit}`);
 
             Toast.fire({
@@ -297,7 +285,6 @@ socket.on('telemetry', (data) => {
     }
 });
 
-// Cập nhật màu các nút chế độ
 function updateModeButtons() {
     const btnAuto = document.getElementById('btn-mode-auto');
     const btnManual = document.getElementById('btn-mode-manual');
@@ -317,13 +304,12 @@ function setMode(mode) {
     if (pendingModeTimer) clearTimeout(pendingModeTimer);
     pendingModeTimer = setTimeout(() => {
         pendingMode = null;
-    }, 4000); // Tạm khóa 4 giây để chờ ESP32 cập nhật và phản hồi telemetry mới
+    }, 4000);
 
     socket.emit('control', { cmd: 'set_mode', mode: mode });
     addLog(`Gửi yêu cầu đổi chế độ -> ${mode.toUpperCase()}`);
     updateModeButtons();
 
-    // Đóng các hộp thoại cảnh báo modal tự động khi chuyển sang chế độ MANUAL
     if (mode === 'manual') {
         Swal.close();
     }
@@ -394,7 +380,6 @@ async function loadHistory() {
         
         addLog(`Đã tải ${data.length} bản ghi lịch sử từ SQLite vào bảng.`, 'success');
         
-        // Hiện Modal
         const modalEl = document.getElementById('historyModal');
         const modalInst = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
         modalInst.show();
@@ -434,7 +419,6 @@ async function clearDbHistory() {
                     text: 'Toàn bộ dữ liệu lịch sử trong DB đã được dọn sạch.',
                     confirmButtonColor: '#2ecc71'
                 });
-                // Đóng modal và làm mới dữ liệu
                 const modalEl = document.getElementById('historyModal');
                 const modalInst = bootstrap.Modal.getInstance(modalEl);
                 if (modalInst) modalInst.hide();

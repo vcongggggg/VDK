@@ -1,4 +1,3 @@
-// AnomalyDetector.js
 class AnomalyDetector {
     constructor(windowSize = 30, zThreshold = 3, cusumSlack = 0.5, cusumThreshold = 10, minStdDev = 1.0, alertCooldownMs = 30000) {
         this.windowSize = windowSize;
@@ -12,30 +11,24 @@ class AnomalyDetector {
         this.alertCooldown = alertCooldownMs;
         this.lastAlertTime = 0;
         
-        // CƠ CHẾ MUTE ĐỘNG
         this.isDeviceActive = false; // Trạng thái thực của Bơm/Quạt
         this.settlingUntil = 0;      // Mốc thời gian chờ môi trường ổn định sau khi tắt
     }
 
-    // Hàm gọi khi thiết bị BẬT hoặc TẮT
     setDeviceState(isActive, settlingMs = 15000) {
-        // Nếu thiết bị vừa chuyển từ BẬT sang TẮT
         if (this.isDeviceActive && !isActive) {
-            // Cho môi trường thêm 1 khoảng thời gian ngắn để ổn định (vd: nước ngấm, nhiệt độ tản đều)
             this.settlingUntil = Date.now() + settlingMs;
         }
         
         this.isDeviceActive = isActive;
-        this.resetCusum(); // Xóa sạch tích lũy cũ
+        this.resetCusum();
     }
 
-    // Làm mù bộ phát hiện trong ms mili-giây
     muteFor(ms) {
         this.settlingUntil = Date.now() + ms;
         this.resetCusum();
     }
 
-    // Thuật toán bị Mute nếu thiết bị ĐANG CHẠY hoặc ĐANG TRONG THỜI GIAN CHỜ ỔN ĐỊNH
     isMuted() {
         return this.isDeviceActive || (Date.now() < this.settlingUntil);
     }
@@ -50,7 +43,6 @@ class AnomalyDetector {
         const mean = sum / this.windowSize;
         const variance = this.buffer.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / this.windowSize;
         
-        // Áp dụng giới hạn độ lệch chuẩn tối thiểu (noise floor) để tránh nhạy cảm quá mức khi môi trường đứng yên
         const stdDev = Math.max(Math.sqrt(variance), this.minStdDev);
 
         const zScore = Math.abs((value - mean) / stdDev);
@@ -92,7 +84,6 @@ class AnomalyDetector {
             this.resetCusum();
         }
 
-        // Luôn cập nhật cửa sổ trượt (sliding window) để thích ứng với trạng thái mới của môi trường
         this.buffer.shift();
         this.buffer.push(value);
 

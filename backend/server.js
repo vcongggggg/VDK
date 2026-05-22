@@ -65,7 +65,7 @@ db.serialize(() => {
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-// API lấy lịch sử dữ liệu (phục vụ Offline Mode)
+// API lấy lịch sử dữ liệu
 app.get('/api/history', (req, res) => {
     db.all(`
         SELECT 
@@ -99,14 +99,13 @@ app.post('/api/history/clear', (req, res) => {
     });
 });
 
-// Quản lý trạng thái kết nối ESP32 (Heartbeat)
+// Quản lý trạng thái kết nối ESP32
 let lastEspSeen = 0;
 let isEspOnline = false;
 let latestTelemetry = null;
 
-// Kiểm tra trạng thái Online/Offline của ESP32 mỗi 2 giây
 setInterval(() => {
-    const isCurrentlyOnline = (Date.now() - lastEspSeen < 10000); // 10 giây timeout
+    const isCurrentlyOnline = (Date.now() - lastEspSeen < 10000);
     if (isCurrentlyOnline !== isEspOnline) {
         isEspOnline = isCurrentlyOnline;
         console.log(`ESP32 Status Changed: ${isEspOnline ? 'ONLINE' : 'OFFLINE'}`);
@@ -114,7 +113,6 @@ setInterval(() => {
     }
 }, 2000);
 
-// Xử lý nâng cấp HTTP lên WebSocket chỉ cho đường dẫn /ws (cho ESP32)
 server.on('upgrade', (request, socket, head) => {
     const pathname = new URL(request.url, `http://${request.headers.host}`).pathname;
     if (pathname === '/ws') {
@@ -124,7 +122,6 @@ server.on('upgrade', (request, socket, head) => {
     }
 });
 
-// --- LẮNG NGHE ESP32 (Raw WebSocket trên đường dẫn /ws) ---
 wss.on('connection', (ws) => {
     console.log('ESP32 đã kết nối tới Raw WebSocket.');
     lastEspSeen = Date.now();
@@ -153,16 +150,13 @@ wss.on('connection', (ws) => {
 
             // Mái che thay đổi -> Ảnh hưởng Ánh sáng (sốc tức thời) và Nhiệt ẩm
             if (data.roof_status !== lastRoofStatus) {
-                // Khác với Bơm/Quạt là chạy liên tục, Mái che chỉ mất vài giây để quay Servo thay đổi góc.
-                // Do đó, ta chỉ dùng muteFor() để làm mù hệ thống trong thời gian mái đang quay và ánh sáng đang ổn định lại.
-                lightDetector.muteFor(10000); // Làm mù Z-Score ánh sáng trong 10s
-                tempDetector.muteFor(15000);  // Làm mù Nhiệt độ 15s
-                humDetector.muteFor(15000);   // Làm mù Độ ẩm khí 15s
+                lightDetector.muteFor(10000);
+                tempDetector.muteFor(15000);
+                humDetector.muteFor(15000);
                 
                 lastRoofStatus = data.roof_status;
             }
 
-            // --- 3. QUÉT ĐỘT BIẾN TỔNG LỰC ---
             let anomalies = [];
 
             if (data.temperature !== undefined) {
@@ -184,10 +178,8 @@ wss.on('connection', (ws) => {
 
             data.anomalies = anomalies;
 
-            // Broadcast dữ liệu cảm biến đến Dashboard qua Socket.IO
             io.emit('telemetry', data);
 
-            // Lưu dữ liệu vào SQLite nếu là gói tin dữ liệu cảm biến thực tế
             if (data.temperature !== undefined) {
                 const queryText = `
                     INSERT INTO env_logs (temperature, humidity, soil_moisture, light_level, roof_status, pump_status, fan_status, mode)
@@ -220,21 +212,17 @@ wss.on('connection', (ws) => {
     });
 });
 
-// --- LẮNG NGHE WEB DASHBOARD (Socket.IO) ---
 io.on('connection', (socket) => {
     console.log(`Dashboard Client mới kết nối: ${socket.id}`);
     
-    // Gửi trạng thái kết nối và số liệu mới nhất ngay lập tức khi mở web
     socket.emit('esp_status', { online: isEspOnline });
     if (latestTelemetry) {
         socket.emit('telemetry', latestTelemetry);
     }
 
-    // Nhận lệnh từ Dashboard gửi xuống ESP32
     socket.on('control', (commandData) => {
         console.log('Nhận lệnh điều khiển từ Dashboard:', commandData);
         
-        // Chuyển tiếp lệnh này sang ESP32 qua Raw WebSocket
         wss.clients.forEach(client => {
             if (client.readyState === WebSocket.OPEN) {
                 client.send(JSON.stringify(commandData));
